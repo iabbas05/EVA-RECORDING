@@ -1,4 +1,7 @@
-# EVA 0.9.10 — Streaming PC release
+# EVA 0.9.11 — Streaming PC release
+
+## What changed in 0.9.11
+- **Lookup timing in the log.** Every *Verifying booking recipients* run writes one line to `eva.log` (`EVA lookup timing: booking list …, booking pages …, player accounts …`) so a slow step can be pinpointed.
 
 ## What changed in 0.9.10
 - **Cancelled bookings are hidden.** They no longer appear in the Bookings list or in the session picker (cancelled, void and refunded).

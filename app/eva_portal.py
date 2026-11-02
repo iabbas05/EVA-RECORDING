@@ -874,20 +874,28 @@ def _live_users(page, uids, width=4):
 
 
 def _pull_live(page, recording, rows=None):
+    t0 = time.monotonic()
+    cached = rows is not None
     if rows is None:
         rows = _live_candidates(page, recording)
+    t_list = time.monotonic() - t0
     match = match_bookings(recording, rows)
     if match['status'] != 'matched':
         return dict(ok=True, match=match['status'], bookings=[], users=[], message='No unique actual play session matches these times in Bahrain.')
     selected = match['bookings']
     bookings, wanted = [], []
+    t1 = time.monotonic()
     for row in selected:
         booking = _live_detail(page,row)
         bookings.append(booking)
         for uid in dict.fromkeys(booking['attendee_user_ids']+([booking['owner_user_id']] if booking['owner_user_id'] else [])):
             if uid not in wanted:
                 wanted.append(uid)
+    t_detail = time.monotonic() - t1
+    t2 = time.monotonic()
     users = _live_users(page, wanted)
+    LOG.info('EVA lookup timing: booking list %.1fs (%s), booking pages %.1fs (%s), player accounts %.1fs (%s)', t_list,
+             'reused' if cached else 'read', t_detail, len(selected), time.monotonic() - t2, len(wanted))
     final = match_bookings(recording,bookings)
     if final['status'] != 'matched' or len(final['bookings']) != len(bookings):
         raise EvaPortalError('Booking status or play session changed. Synchronization is blocked.')
