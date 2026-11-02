@@ -20,7 +20,7 @@ from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse, quote, unquote
 
-from matching import match_bookings, group_sessions, BAHRAIN
+from matching import match_bookings, group_sessions, BAHRAIN, _is_cancelled
 from app_paths import DATA, settings, save_settings
 
 LOG = logging.getLogger('eva')
@@ -770,7 +770,7 @@ def day_bookings(session_date):
         if _is_login_page(page.url):
             return dict(ok=False, login_required=True, sessions=[], message='Sign in using Open EVA Admin in EVA Settings, then load bookings again.')
         _wait_bookings(page)
-        rows = _live_candidates(page, {'session_date':session_date})
+        rows = [r for r in _live_candidates(page, {'session_date':session_date}) if not _is_cancelled(r.get('status'))]   # cancelled bookings are not shown anywhere
         sessions = group_sessions(rows, session_date)
         _save_session(page.context)
         _window(page, 'minimized')

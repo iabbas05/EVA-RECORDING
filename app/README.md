@@ -1,4 +1,7 @@
-# EVA 0.9.9 — Streaming PC release
+# EVA 0.9.10 — Streaming PC release
+
+## What changed in 0.9.10
+- **Cancelled bookings are hidden.** They no longer appear in the Bookings list or in the session picker (cancelled, void and refunded).
 
 ## What changed in 0.9.9
 - **Update check no longer fails with a certificate error.** EVA now trusts the Windows certificate store plus its own bundled list, and shows a plain message (check the PC clock, antivirus HTTPS scanning, or use *Browse update ZIP*) if GitHub still cannot be trusted.

@@ -48,6 +48,8 @@ class Live(unittest.TestCase):
         starts = [(s['start_time'], s['end_time'], s['booking_count']) for s in r['sessions']]
         self.assertIn(('19:20:00', '20:00:00', 2), starts)              # two bookings, one play session
         self.assertNotIn('14:00:00', [s['start_time'] for s in r['sessions']])   # cancelled booking excluded
+        self.assertFalse([b for b in r['bookings'] if 'cancel' in b['status'].casefold()], r['bookings'])   # ...and not in the booking list either
+        self.assertNotIn('14:00:00', [b['start_time'] for b in r['bookings']])
 
     def test_04_past_day_uses_last_30_days(self):
         y = mock_admin.today() - timedelta(days=1)
