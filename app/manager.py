@@ -259,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
                 if row:
                     state.update(started_at=row['started_at'] or row['created_at'], session_status=row['status'], session_error=row['error'])
                 return self._json(200, {'ok': True, 'version': VERSION, 'pairing_id': PAIRING_ID,
-                    'recorder': state, 'recording_layout': settings().get('recording_layout','obs_game'),
+                    'recorder': state, 'recording_layout': settings().get('recording_layout','obs_game'), 'record_mode': settings().get('record_mode','both'),
                     'venue': settings().get('venue_label') or 'Bahrain', 'admin_browser': find_browser()[0], 'eva_session_saved': admin_session_saved(),
                     'arena': (str(settings().get('arena_numbers') or '1').split(',')[0].strip() or '1'),
                     'active_recording_id': SERVICE.active_id, 'local': local(self.client_address[0]),
@@ -334,6 +334,14 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     filename.unlink(missing_ok=True)
             body = self._body()
+            if path == '/api/recorder/mode':
+                if SERVICE.active_id:
+                    raise ValueError('Stop the recording before changing what is recorded')
+                mode = str(body.get('record_mode') or '')
+                if mode not in {'both', 'streamlabs', 'obs'}:
+                    raise ValueError('Choose Streamlabs only, OBS only, or both')
+                save_settings(record_mode=mode)
+                return self._json(200, {'ok': True, 'record_mode': mode})
             if path == '/api/recordings/start':
                 with MAINTENANCE, QUEUE.lock:
                     if UPDATING:
@@ -546,7 +554,9 @@ class Handler(BaseHTTPRequestHandler):
             EVA_STATE.update(status='synced', message=manual['message'])
             return manual
         EVA_STATE.update(status='syncing', message='Reading the actual game/session and linked attendees…')
-        result = EVA_BROWSER_QUEUE.submit(pull_recording_session, recording).result(timeout=180)
+        snap = LIVE.snapshot()
+        fresh = snap.get('ok') and not snap.get('stale') and snap.get('session_date') == recording.get('session_date')
+        result = EVA_BROWSER_QUEUE.submit(pull_recording_session, recording, snap.get('bookings') if fresh else None).result(timeout=180)
         if result.get('ok') and result.get('match') == 'matched':
             STORE.import_selected_booking_data(result['bookings'], result['users'], recording['id'])
             games = {b.get('game') for b in result['bookings'] if b.get('game')}

@@ -295,19 +295,19 @@ def deliver_video(store, video_path: str, recording: dict, recipients: list[dict
 
 def deliver_session(store, recording, recipients, booking_ids, progress=lambda state: None):
     """Upload both assets, grant access to both, send one message with both links."""
-    if recording.get('status') != 'ready_for_review' or not recording.get('camera_path'):
-        raise GoogleIntegrationError('Only a complete dual recording can be delivered')
+    videos = [(name, recording[col]) for name, col in (('Game', 'output_path'), ('Camera', 'camera_path')) if recording.get(col)]
+    if recording.get('status') != 'ready_for_review' or not videos:
+        raise GoogleIntegrationError('Only a complete recording can be delivered')
     if not recipients or any(not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', str(r.get('email', ''))) for r in recipients):
         raise GoogleIntegrationError('Select valid booking-linked recipient emails')
-    game, game_hash = video_fingerprint(recording['output_path'])
-    camera, camera_hash = video_fingerprint(recording['camera_path'])
-    pair_hash = hashlib.sha256((game_hash + ':' + camera_hash).encode()).hexdigest()
+    prints = [(name, *video_fingerprint(path)) for name, path in videos]
+    pair_hash = hashlib.sha256(':'.join(h for _, _, h in prints).encode()).hexdigest()
     drive, gmail = _services()
     sender = _sender_email(drive)
-    progress('uploading_game')
-    game_id = _drive_video(drive, game, game_hash, store)
-    progress('uploading_camera')
-    camera_id = _drive_video(drive, camera, camera_hash, store)
+    file_ids = {}
+    for name, fingerprint, digest in prints:
+        progress('uploading_' + name.lower())
+        file_ids[name] = _drive_video(drive, fingerprint, digest, store)
     label = f"{recording['session_date']} {recording['start_time']}–{recording['end_time']} Bahrain time"
     outcomes = []
     for recipient in recipients:
@@ -323,12 +323,11 @@ def deliver_session(store, recording, recipients, booking_ids, progress=lambda s
                 continue
         try:
             progress('sharing')
-            game_url = _ensure_private_share(drive, game_id, email)
-            camera_url = _ensure_private_share(drive, camera_id, email)
+            urls = {name: _ensure_private_share(drive, file_id, email) for name, file_id in file_ids.items()}
             progress('emailing')
             store.update_delivery(pair_hash, email, 'uncertain')
             sent = _send_message(gmail, email, recipient.get('name', ''),
-                                 f'Game: {game_url}\nCamera: {camera_url}', label, booking_ids, sender)
+                                 '\n'.join(f'{name}: {url}' for name, url in urls.items()), label, booking_ids, sender)
             store.update_delivery(pair_hash, email, 'sent', sent.get('id'))
             outcomes.append({'email': email, 'status': 'sent'})
         except GoogleIntegrationError as exc:
@@ -336,7 +335,7 @@ def deliver_session(store, recording, recipients, booking_ids, progress=lambda s
             state = 'uncertain' if uncertain else 'failed'
             store.update_delivery(pair_hash, email, state)
             outcomes.append({'email': email, 'status': state, 'error': str(exc)})
-    return {'outcomes': outcomes, 'video_sha256': pair_hash, 'drive_file_ids': [game_id, camera_id]}
+    return {'outcomes': outcomes, 'video_sha256': pair_hash, 'drive_file_ids': list(file_ids.values())}
 
 
 def send_test_email(store=None):

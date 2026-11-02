@@ -6,7 +6,7 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from matching import BAHRAIN
-from capture_files import begin_capture, resolve_files
+from capture_files import begin_capture, resolve_files, keys_for
 from obs_control import ObsUnavailable
 from media_check import verify_pair
 
@@ -37,9 +37,14 @@ class RecordingService:
                 # EVA was closed while the recorders may still be recording. Re-attach to the same session
                 # (Stop verifies both files against the saved start time) instead of discarding it.
                 self.resume, self.resume_deadline = row['id'], time.monotonic() + RESUME_GRACE_SECONDS
+                self._use_keys(json.loads(row['capture_json']).get('keys'))
                 continue
             store.update_recording(row['id'], status='interrupted', error='EVA restarted during recording. Stop both and review the files before sending.')
         self.cached = {'connected': False, 'recording': False, 'mode': 'dual', 'error': 'Checking recorders…'}
+
+    def _use_keys(self, keys):
+        if hasattr(self.obs, 'set_keys'):
+            self.obs.set_keys(keys or ('game', 'camera'))
 
     def status(self):
         with self.lock:
@@ -91,10 +96,14 @@ class RecordingService:
         with self.lock:
             if self.active_id:
                 raise ValueError('Stop the active session before starting another')
+            cfg = self.config()
+            mode = str(body.get('record_mode') or cfg.get('record_mode') or 'both')
+            keys = keys_for(mode, cfg.get('recording_layout', 'obs_game'))
+            self._use_keys(keys)
             current = self.obs.status()
             if not current.get('connected') or current.get('recording'):
                 raise ObsUnavailable(current.get('error') or 'A recorder is already recording outside EVA')
-            capture = begin_capture(self.config())
+            capture = begin_capture(cfg, keys)
             recording_id = str(uuid.uuid4())
             self.store.create_recording({'id': recording_id, 'created_at': now_utc(), 'branch': 'Bahrain', 'arena_id': '81',
                 'session_date': day, 'start_time': start, 'end_time': end,
@@ -148,7 +157,7 @@ class RecordingService:
                     raise ObsUnavailable('Could not confirm both recorders stopped')
                 paths = resolve_files(json.loads(row['capture_json']), result.get('output_paths', {}))
                 elapsed = (requested_stop - datetime.fromisoformat(row['started_at'] or row['created_at'])).total_seconds()
-                verify_pair(paths, elapsed)
+                verify_pair({k: v for k, v in paths.items() if v}, elapsed)
             except Exception as exc:
                 self.store.update_recording(recording_id, status='stop_failed', error=str(exc))
                 raise

@@ -15,16 +15,30 @@ def snapshot(folder):
     return {str(p.resolve()): [p.stat().st_size, p.stat().st_mtime_ns] for p in path.iterdir()
             if p.is_file() and p.suffix.casefold() in EXTENSIONS}
 
-def begin_capture(config):
-    game, camera = config.get('game_folder', ''), config.get('camera_folder', '')
-    if not game or not camera or Path(game).resolve() == Path(camera).resolve():
+BOTH = ('game', 'camera')
+
+
+def keys_for(mode, layout):
+    """Which of the two videos (game / camera) a record mode produces. In the 'streamlabs_game' layout Streamlabs records the
+    game and OBS the camera; in 'obs_game' it is the other way round."""
+    streamlabs = 'game' if layout == 'streamlabs_game' else 'camera'
+    obs = 'camera' if streamlabs == 'game' else 'game'
+    try:
+        return {'both': BOTH, 'streamlabs': (streamlabs,), 'obs': (obs,)}[mode]
+    except KeyError:
+        raise ObsUnavailable('Choose Streamlabs only, OBS only, or both') from None
+
+
+def begin_capture(config, keys=BOTH):
+    folders = {'game': config.get('game_folder', ''), 'camera': config.get('camera_folder', '')}
+    if any(not folders[k] for k in keys) or (len(keys) == 2 and Path(folders['game']).resolve() == Path(folders['camera']).resolve()):
         raise ObsUnavailable('Use two separate recording folders for Game and Camera, then save them in Settings')
-    return {'started': time.time(), 'folders': {'game': str(Path(game).resolve()), 'camera': str(Path(camera).resolve())},
-            'before': {'game': snapshot(game), 'camera': snapshot(camera)}}
+    return {'started': time.time(), 'keys': list(keys), 'folders': {k: str(Path(folders[k]).resolve()) for k in keys},
+            'before': {k: snapshot(folders[k]) for k in keys}}
 
 def resolve_files(capture, outputs):
-    result = {}
-    for key in ('game', 'camera'):
+    result = {'game': None, 'camera': None}
+    for key in capture.get('keys') or BOTH:
         folder = Path(capture['folders'][key]).resolve()
         explicit = outputs.get(key)
         candidates = []
@@ -52,6 +66,6 @@ def resolve_files(capture, outputs):
                 header.startswith(b'FLV') or header.startswith(b'RIFF')):
             raise ObsUnavailable(f'{key}: unrecognized video container; the session needs review')
         result[key] = str(path)
-    if result['game'] == result['camera']:
+    if result['game'] and result['game'] == result['camera']:
         raise ObsUnavailable('Game and Camera must be separate video files')
     return result

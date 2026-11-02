@@ -20,10 +20,10 @@ class DeliveryQueue:
                 store.job_update(job['recording_id'], state='queued', error='Resuming interrupted delivery')
 
     def enqueue(self, recording, recipients, booking_ids):
-        if recording['status'] != 'ready_for_review' or not recording.get('camera_path'):
+        if recording['status'] != 'ready_for_review' or not (recording.get('camera_path') or recording.get('output_path')):
             raise ValueError('This session is incomplete or has not stopped; sending is blocked')
         with self.lock:
-            hashes = {key: video_fingerprint(recording[key])[1] for key in ('output_path', 'camera_path')}
+            hashes = {key: video_fingerprint(recording[key])[1] for key in ('output_path', 'camera_path') if recording.get(key)}
             self.store.enqueue(recording['id'], {'recipients': recipients, 'booking_ids': booking_ids, 'hashes': hashes})
             self.wake.set()
         return self.store.jobs()
@@ -122,8 +122,8 @@ def cleanup_old_videos(store, folders, days, now=None, log=None):
         job = jobs.get(rec['id'])
         if not job or job['state'] != 'sent' or now - float(job['updated_at']) < days * 86400:
             continue
-        paths = [rec.get('output_path'), rec.get('camera_path')]
-        if not all(paths):
+        paths = [p for p in (rec.get('output_path'), rec.get('camera_path')) if p]
+        if not paths:
             continue
         resolved = [norm(p) for p in paths]
         if any(r is None or r not in assets for r in resolved):

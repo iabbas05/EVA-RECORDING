@@ -1,4 +1,9 @@
-# EVA 0.9.7 — Streaming PC release
+# EVA 0.9.8 — Streaming PC release
+
+## What changed in 0.9.8
+- **Choose what to record.** A selector next to *Record* on the dashboard: *Streamlabs + OBS (both)*, *Streamlabs only* or *OBS only*. It is remembered. Only the chosen recorder is started, checked and stopped; the other may be closed. A one-video session is verified, uploaded to Drive and emailed with just that video.
+- **Settings is its own page** in the left menu. The dashboard shows only recording.
+- **Faster EVA session lookup.** EVA reuses the bookings the background sync has just read instead of reloading the list, no longer waits on pages that have no venue button, and reads player accounts in several tabs at the same time.
 
 ## What changed in 0.9.7
 - **Google OAuth file is found automatically.** Put the file you downloaded from Google in the config folder under any name (`client_secret_….json`, or a name Windows changed). EVA finds a Desktop-app client file by itself. A *Web application* file is rejected with a clear message.

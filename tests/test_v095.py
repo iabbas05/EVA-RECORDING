@@ -87,6 +87,17 @@ class CleanupSetting(unittest.TestCase):
         for bad in ('x', -1, 400): self.assertEqual(call('/api/settings/save', 'POST', dict(base, cleanup_days=bad))[0], 400, bad)
         self.assertEqual(call('/api/settings/save', 'POST', dict(base, cleanup_days=10))[0], 200)
 
+class RecordModeEndpoint(unittest.TestCase):
+    def test_mode_is_saved_validated_and_reported(self):
+        self.assertEqual(call('/api/status')[1]['record_mode'], 'both')
+        for m in ('streamlabs', 'obs', 'both'):
+            self.assertEqual(call('/api/recorder/mode', 'POST', dict(record_mode=m))[0], 200); self.assertEqual(call('/api/status')[1]['record_mode'], m)
+        self.assertEqual(call('/api/recorder/mode', 'POST', dict(record_mode='x'))[0], 400)
+    def test_mode_cannot_change_while_recording(self):
+        manager.SERVICE.active_id = 'busy'
+        try: self.assertEqual(call('/api/recorder/mode', 'POST', dict(record_mode='obs'))[0], 400)
+        finally: manager.SERVICE.active_id = None
+
 class SignInTiming(unittest.TestCase):
     def test_sign_in_window_is_refused_during_a_recording(self):
         manager.SERVICE.active_id = 'busy'

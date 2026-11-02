@@ -20,7 +20,7 @@ print(a.read('EVA_INSTALL/READ_ME_FIRST.txt').decode()[:700])
 old=A.read_exe('/home/claude/eva_v090_inner/EVA.exe'); new=A.read_exe(f'{OUT}/EVA.exe')
 ok(new['bootloader']==old['bootloader'] and new['pyver']==old['pyver'],'program part of EVA.exe is byte-identical to 0.9.0')
 ok([e.name for e in old['entries']]==[e.name for e in new['entries']],'same 1303 entries, same order')
-CH={'eva_portal.py','google_delivery.py','service.py','manager.py','diagnostics.py','index.html','version.txt','README.md','TEST_CHECKLIST.md','recorder_repair.py','updater.py','delivery_queue.py','storage.py'}
+CH={'eva_portal.py','google_delivery.py','service.py','manager.py','diagnostics.py','index.html','version.txt','README.md','TEST_CHECKLIST.md','recorder_repair.py','updater.py','delivery_queue.py','storage.py','dual_recorder.py','capture_files.py'}
 diff={o.name for o,n in zip(old['entries'],new['entries']) if o.stored!=n.stored}
 ok(diff==CH|{'PYZ.pyz'},f'only these entries differ: {sorted(diff)}')
 _,_,om=A.read_pyz(next(e for e in old['entries'] if e.typ=='z').data()); _,_,nm=A.read_pyz(next(e for e in new['entries'] if e.typ=='z').data())

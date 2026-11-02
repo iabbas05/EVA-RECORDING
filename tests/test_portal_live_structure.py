@@ -63,6 +63,32 @@ class Live(unittest.TestCase):
                                   'own1': 'owner1@example.com', 'own2': ''})
         self.assertEqual(len(r['notes']), 1); self.assertIn('1004', r['notes'][0]); self.assertIn('1 of 5', r['notes'][0])
 
+    def test_05b_cached_rows_skip_the_booking_list_and_give_the_same_answer(self):
+        import time
+        MOCK.scope = 'Marassi'
+        day = P.day_bookings(mock_admin.today().isoformat())                       # what the background sync read a moment ago
+        MOCK.calls.clear(); t = time.time()
+        fast = P.pull_recording_session(session('19:20:00', '20:00:00'), day['bookings'])
+        took = time.time() - t
+        self.assertTrue(fast['ok'] and fast['match'] == 'matched', fast)
+        self.assertFalse([c for c in MOCK.calls if c == '/bookings'], MOCK.calls)   # the list page was not loaded again
+        slow = P.pull_recording_session(session('19:20:00', '20:00:00'))
+        self.assertEqual(sorted(u['email'] for u in fast['users']), sorted(u['email'] for u in slow['users']))
+        self.assertEqual(sorted(b['booking_id'] for b in fast['bookings']), sorted(b['booking_id'] for b in slow['bookings']))
+        self.assertLess(took, 15)
+
+    def test_05c_cached_rows_for_another_day_fall_back_to_reading_the_list(self):
+        MOCK.scope = 'Marassi'
+        r = P.pull_recording_session(session('19:20:00', '20:00:00'), [dict(booking_id='9', session_date='2000-01-01')])
+        self.assertTrue(r['ok'] and r['match'] == 'matched', r)
+
+    def test_05d_wrong_cached_times_are_caught_by_the_booking_page(self):
+        MOCK.scope = 'Marassi'
+        day = P.day_bookings(mock_admin.today().isoformat())
+        rows = [dict(r, start_time='10:00:00', end_time='11:00:00') if r['booking_id'] == '1003' else r for r in day['bookings']]
+        with self.assertRaises(P.EvaPortalError) as c: P.pull_recording_session(session('10:00:00', '11:00:00'), rows)
+        self.assertIn('Booking details changed', str(c.exception))
+
     def test_06_one_of_ten_linked_is_allowed_and_user_id_with_hash(self):
         r = P.session_recipients(session('18:40:00', '19:20:00'))
         self.assertTrue(r['ok'], r); self.assertEqual(r['bookings'][0]['attendees_linked'], 1)

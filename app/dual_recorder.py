@@ -12,12 +12,20 @@ class DualRecorder:
         self.game_recorder, self.camera_recorder = (streamlabs, obs) if layout == 'streamlabs_game' else (obs, streamlabs)
         self.lock = threading.RLock()
         self.outputs = {'game': None, 'camera': None}
+        self.keys = ('game', 'camera')
+
+    def set_keys(self, keys):
+        """Which recorders take part: ('game','camera'), ('game',) or ('camera',). Only changeable while nothing records."""
+        keys = tuple(k for k in ('game', 'camera') if k in keys)
+        if not keys:
+            raise ValueError('Choose at least one recorder')
+        self.keys = keys
 
     def _parallel(self, operation):
         results, errors = {}, {}
         with ThreadPoolExecutor(max_workers=2) as pool:
             jobs = {key: pool.submit(getattr(recorder, operation)) for key, recorder in
-                    (('game', self.game_recorder), ('camera', self.camera_recorder))}
+                    (('game', self.game_recorder), ('camera', self.camera_recorder)) if key in self.keys}
             for key, job in jobs.items():
                 try:
                     results[key] = job.result()
@@ -30,18 +38,21 @@ class DualRecorder:
             results, errors = self._parallel('status')
             for key in errors:
                 results[key] = {'connected': False, 'recording': False, 'error': errors[key]}
+            active = dict(results)
+            for key in ('game', 'camera'):
+                results.setdefault(key, {'connected': True, 'recording': False, 'skipped': True})
             game, camera = results['game'], results['camera']
-            connected = all(r.get('connected') for r in results.values())
-            recording = any(r.get('recording') for r in results.values())
-            synchronized = connected and game.get('recording') == camera.get('recording')
-            issues = [f'{key}: {r.get("error", "Disconnected")}' for key, r in results.items() if not r.get('connected')]
+            connected = all(r.get('connected') for r in active.values())
+            recording = any(r.get('recording') for r in active.values())
+            synchronized = connected and len({bool(r.get('recording')) for r in active.values()}) == 1
+            issues = [f'{key}: {r.get("error", "Disconnected")}' for key, r in active.items() if not r.get('connected')]
             if connected and not synchronized:
                 issues.append('Only one recorder is recording. Stop and review this session.')
-            if any(r.get('paused') for r in results.values()):
+            if any(r.get('paused') for r in active.values()):
                 issues.append('A recorder is paused. This session is incomplete.')
                 synchronized = False
             return {'connected': connected, 'recording': recording, 'synchronized': synchronized,
-                    'mode': 'dual', 'layout': self.layout, 'game': game, 'camera': camera,
+                    'mode': 'dual' if len(self.keys) == 2 else 'single', 'keys': list(self.keys), 'layout': self.layout, 'game': game, 'camera': camera,
                     'obs': camera if self.layout == 'streamlabs_game' else game,
                     'streamlabs': game if self.layout == 'streamlabs_game' else camera,
                     'output_path': self.outputs['game'],

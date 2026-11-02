@@ -797,7 +797,10 @@ def _live_detail(page, row):
     page.goto(row['detail_url'], wait_until='domcontentloaded', timeout=45_000)
     # The page title is "Order#…"; the booking itself is the row that links to /bookings/<id>.
     page.locator('a[href="/bookings/'+row['booking_id']+'"]').first.wait_for(state='visible', timeout=30_000)
-    _require_bahrain(page, strict=False)  # the venue button is only on the list pages
+    if _is_login_page(page.url):
+        raise EvaPortalError('EVA Admin login expired.')
+    if page.locator('button').filter(has_text=re.compile(r'^\s*Scope')).count():   # the venue button is normally only on list pages: no waiting when absent
+        _require_bahrain(page, strict=False)
     labels = re.findall(r'(?m)^\s*Arena\s*\n\s*(\d+)\s*$', page.locator('body').inner_text())
     if not labels or any(label not in _arena_numbers() for label in labels):
         raise EvaPortalError('Booking does not verify the configured arena (' + ', '.join(_arena_numbers()) +
@@ -840,19 +843,51 @@ def _live_user(page, uid):
     return dict(user_id=uid, username=uid, name=(value('firstName')+' '+value('lastName')).strip(), email=value('email'))
 
 
-def _pull_live(page, recording):
-    rows = _live_candidates(page, recording)
+def _live_users(page, uids, width=4):
+    """Player account pages loaded side by side in extra tabs (the browser loads them at the same time)."""
+    users = {}
+    todo = [u for u in uids]
+    if len(todo) <= 1:
+        return {u: _live_user(page, u) for u in todo}
+    ctx = page.context
+    value = lambda pg, name: pg.locator('input[name="'+name+'"]').input_value().strip()
+    for i in range(0, len(todo), width):
+        chunk, tabs = todo[i:i+width], []
+        try:
+            for uid in chunk:
+                tab = ctx.new_page()
+                tabs.append((uid, tab))
+                tab.goto(BASE_URL+'/users/view/'+quote(uid, safe=''), wait_until='commit', timeout=45_000)
+            for uid, tab in tabs:
+                if _is_login_page(tab.url):
+                    raise EvaPortalError('EVA Admin login expired.')
+                tab.locator('input[name="email"]').wait_for(state='attached', timeout=30_000)
+                tab.wait_for_function("()=>document.querySelector('input[name=firstName]')?.value || document.querySelector('input[name=email]')?.value", timeout=30_000)
+                users[uid] = dict(user_id=uid, username=uid, name=(value(tab, 'firstName')+' '+value(tab, 'lastName')).strip(), email=value(tab, 'email'))
+        finally:
+            for _, tab in tabs:
+                try:
+                    tab.close()
+                except Exception:
+                    pass
+    return users
+
+
+def _pull_live(page, recording, rows=None):
+    if rows is None:
+        rows = _live_candidates(page, recording)
     match = match_bookings(recording, rows)
     if match['status'] != 'matched':
         return dict(ok=True, match=match['status'], bookings=[], users=[], message='No unique actual play session matches these times in Bahrain.')
     selected = match['bookings']
-    bookings, users = [], {}
+    bookings, wanted = [], []
     for row in selected:
         booking = _live_detail(page,row)
         bookings.append(booking)
         for uid in dict.fromkeys(booking['attendee_user_ids']+([booking['owner_user_id']] if booking['owner_user_id'] else [])):
-            if uid not in users:
-                users[uid] = _live_user(page,uid)
+            if uid not in wanted:
+                wanted.append(uid)
+    users = _live_users(page, wanted)
     final = match_bookings(recording,bookings)
     if final['status'] != 'matched' or len(final['bookings']) != len(bookings):
         raise EvaPortalError('Booking status or play session changed. Synchronization is blocked.')
@@ -944,10 +979,16 @@ def _lookup_user(page, user_id: str) -> dict:
     return {"user_id": user_id, "username": "", "name": "", "email": ""}
 
 
-def pull_recording_session(recording: dict) -> dict:
-    """Read matching bookings only, then read only attendee/owner account IDs from them."""
+def pull_recording_session(recording: dict, rows: list | None = None) -> dict:
+    """Read matching bookings only, then read only attendee/owner account IDs from them.
+    `rows`: the day's bookings the background sync read moments ago; with them the booking list is not loaded again."""
     with _LOCK:
         page = _page()
+        if rows:
+            rows = [dict(r, detail_url=r.get('detail_url') or BASE_URL + '/bookings/' + str(r['booking_id'])) for r in rows
+                    if r.get('session_date') == recording.get('session_date')]
+            if rows:
+                return _pull_live(page, recording, rows)
         page.goto(BASE_URL + "/bookings", wait_until="domcontentloaded", timeout=45_000)
         time.sleep(1)
         if _is_login_page(page.url):

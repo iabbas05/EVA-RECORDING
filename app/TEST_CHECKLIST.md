@@ -1,3 +1,8 @@
+# Test checklist additions for 0.9.8
+- Dashboard: choose Streamlabs only -> Record -> Stop: one video, OBS not touched. Same for OBS only and both.
+- Settings opens as its own page; the dashboard no longer shows it.
+- Stop a session and press Sync: recipients appear noticeably faster than before.
+
 # Test checklist additions for 0.9.6
 - Settings shows 'Delete local videos after (days)' = 10. Set 0, save, set back.
 - After 10 days a fully sent session's Game and Camera files disappear; older unsent ones stay.
