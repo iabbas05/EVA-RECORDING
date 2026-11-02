@@ -83,4 +83,26 @@ class T(unittest.TestCase):
         self.assertIn('old', self.drive.deleted)                    # the previous test file was cleaned up
         self.assertEqual(self.drive.perms, {})                      # nothing shared with anyone
 
+
+
+class ClientFile(unittest.TestCase):
+    def setUp(self):
+        import google_delivery as G, tempfile, pathlib
+        self.G = G; self.old = G.CLIENT_FILE
+        G.CLIENT_FILE = pathlib.Path(tempfile.mkdtemp()) / 'config' / 'google_oauth_client.json'; G.CLIENT_FILE.parent.mkdir()
+    def tearDown(self): self.G.CLIENT_FILE = self.old
+    def put(self, name, data):
+        import json; (self.G.CLIENT_FILE.parent / name).write_text(json.dumps(data)); return self.G.CLIENT_FILE.parent / name
+    def test_exact_name(self):
+        f = self.put('google_oauth_client.json', {'installed': {'client_id': 'x'}}); self.assertEqual(self.G.find_client_file(), f)
+    def test_google_download_name_and_windows_double_extension(self):
+        f = self.put('client_secret_123-abc.apps.googleusercontent.com.json', {'installed': {'client_id': 'x'}}); self.assertEqual(self.G.find_client_file(), f)
+        f.unlink(); f = self.put('google_oauth_client.json.json', {'installed': {'client_id': 'x'}}); self.assertEqual(self.G.find_client_file(), f)
+    def test_web_client_or_junk_is_not_accepted(self):
+        self.put('web.json', {'web': {'client_id': 'x'}}); (self.G.CLIENT_FILE.parent / 'bad.json').write_text('nope')
+        self.assertIsNone(self.G.find_client_file()); self.assertFalse(self.G.sign_in_state()['client_configured'])
+        with self.assertRaises(self.G.GoogleIntegrationError) as c: self.G.begin_sign_in()
+        self.assertIn('Desktop app', str(c.exception))
+
+
 if __name__ == '__main__': unittest.main()

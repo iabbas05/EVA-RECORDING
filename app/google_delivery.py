@@ -23,6 +23,27 @@ STREAMLABS_KEYRING_ACCOUNT = "remote-control-token"
 OBS_KEYRING_SERVICE = "EVA Recording Manager OBS"
 OBS_KEYRING_ACCOUNT = "websocket-password"
 CLIENT_FILE = DATA / 'config' / 'google_oauth_client.json'
+
+
+def find_client_file():
+    """The Google 'Desktop app' client file. Accepts the exact name, or the file as Google downloads it
+    (client_secret_....json), or a name Windows changed (e.g. google_oauth_client.json.json / (1))."""
+    if CLIENT_FILE.is_file():
+        return CLIENT_FILE
+    folder = CLIENT_FILE.parent
+    try:
+        candidates = sorted((f for f in folder.glob('*.json*') if f.is_file() and f.stat().st_size < 64_000),
+                            key=lambda f: f.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    for f in candidates:
+        try:
+            data = json.loads(f.read_text(encoding='utf-8-sig'))
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get('installed'), dict) and data['installed'].get('client_id'):
+            return f
+    return None
 _AUTH_LOCK = threading.Lock()
 _SIGNIN_STATE = {"status": "signed_out", "error": None}
 
@@ -64,10 +85,10 @@ def sign_in_state():
         keyring = _keyring()
         saved = keyring.get_password(KEYRING_SERVICE, KEYRING_ACCOUNT)
         return {"signed_in": bool(saved), "status": _SIGNIN_STATE["status"],
-                "error": _SIGNIN_STATE["error"], "client_configured": CLIENT_FILE.is_file()}
+                "error": _SIGNIN_STATE["error"], "client_configured": find_client_file() is not None}
     except GoogleIntegrationError as exc:
         return {"signed_in": False, "status": _SIGNIN_STATE["status"],
-                "error": str(exc), "client_configured": CLIENT_FILE.is_file()}
+                "error": str(exc), "client_configured": find_client_file() is not None}
 
 
 def open_setup_folder() -> None:
@@ -80,14 +101,15 @@ def open_setup_folder() -> None:
 def begin_sign_in() -> None:
     if _SIGNIN_STATE["status"] == "signing_in":
         return
-    if not CLIENT_FILE.is_file():
-        raise GoogleIntegrationError("Add your Google Desktop OAuth file at config/google_oauth_client.json first.")
+    client = find_client_file()
+    if client is None:
+        raise GoogleIntegrationError("The Google OAuth file was not found in " + str(CLIENT_FILE.parent) + ". Use the 'Desktop app' client type, download its JSON and put it in that folder. If Google gave a 'Web application' file, create a new Desktop one.")
     _SIGNIN_STATE.update(status="signing_in", error=None)
 
     def worker():
         try:
             from google_auth_oauthlib.flow import InstalledAppFlow
-            flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_FILE), SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(str(client), SCOPES)
             credentials = flow.run_local_server(host="127.0.0.1", port=0, open_browser=True,
                                                 access_type="offline", prompt="consent", timeout_seconds=180)
             _keyring().set_password(KEYRING_SERVICE, KEYRING_ACCOUNT, credentials.to_json())

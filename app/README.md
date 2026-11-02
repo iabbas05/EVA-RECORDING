@@ -1,4 +1,7 @@
-# EVA 0.9.6 — Streaming PC release
+# EVA 0.9.7 — Streaming PC release
+
+## What changed in 0.9.7
+- **Google OAuth file is found automatically.** Put the file you downloaded from Google in the config folder under any name (`client_secret_….json`, or a name Windows changed). EVA finds a Desktop-app client file by itself. A *Web application* file is rejected with a clear message.
 
 ## What changed in 0.9.6
 - **Automatic cleanup of old videos.** Ten days after a session has been fully delivered (every email sent) and both videos are saved in Drive, EVA deletes the local Game and Camera files from the recording folders. Settings → *Delete local videos after (days)* changes the number; 0 turns it off. A recording is never cleaned if delivery is unfinished, a video is not confirmed in Drive, or the file is outside the two recording folders. The Drive copies are not touched. It runs hourly, never during a recording or update.
