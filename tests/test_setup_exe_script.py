@@ -1,10 +1,10 @@
 import hashlib, importlib.util, json, os, shutil, sys, tempfile, unittest, zipfile
-REAL_ZIP = '/home/claude/out098/EVA_v0.9.8_UPDATE.zip'
+REAL_ZIP = '/home/claude/out099/EVA_v0.9.9_UPDATE.zip'
 TMP = tempfile.mkdtemp(prefix='eva-setup-t-')
 src = open('/home/claude/tools/setup_main.py').read()
 sha = hashlib.sha256(open(REAL_ZIP, 'rb').read()).hexdigest()
-open(os.path.join(TMP, 'setup_main.py'), 'w').write(src.replace('__VERSION__', '0.9.8').replace('__SHA256__', sha))
-shutil.copy(REAL_ZIP, os.path.join(TMP, 'EVA_v0.9.8_UPDATE.zip'))
+open(os.path.join(TMP, 'setup_main.py'), 'w').write(src.replace('__VERSION__', '0.9.9').replace('__SHA256__', sha))
+shutil.copy(REAL_ZIP, os.path.join(TMP, 'EVA_v0.9.9_UPDATE.zip'))
 os.environ.update(LOCALAPPDATA=os.path.join(TMP, 'local'), EVA_SETUP_NO_UI='1')
 spec = importlib.util.spec_from_file_location('setup_main', os.path.join(TMP, 'setup_main.py')); S = importlib.util.module_from_spec(spec); spec.loader.exec_module(S)
 
@@ -12,7 +12,7 @@ REAL_ENSURE, REAL_RUN, REAL_BOX = S.ensure_prerequisites, S.run_installer, S.box
 
 class Payload(unittest.TestCase):
     def test_verify_mode_checks_the_embedded_update(self):
-        self.assertEqual(S.PACKAGE_NAME, 'EVA_v0.9.8_UPDATE.zip')
+        self.assertEqual(S.PACKAGE_NAME, 'EVA_v0.9.9_UPDATE.zip')
         self.assertEqual(S.main(['--verify']), 0)
 
     def test_damaged_installer_is_refused(self):
@@ -64,14 +64,14 @@ class Flow(unittest.TestCase):
         seen = {}
         def runner(cmd, env, creationflags):
             seen.update(cmd=cmd, env=env, script=open(cmd[2]).read()); return type('R', (), {'returncode': 0})()
-        folder = tempfile.mkdtemp(dir=TMP); REAL_RUN(folder, '/x/EVA_v0.9.8_UPDATE.zip', runner=runner)
+        folder = tempfile.mkdtemp(dir=TMP); REAL_RUN(folder, '/x/EVA_v0.9.9_UPDATE.zip', runner=runner)
         self.assertEqual(seen['cmd'][:2], ['cmd.exe', '/c'])
         self.assertIn('-File "%EVA_PS1%" -PackagePath "%EVA_ZIP%" -RecordingLayout streamlabs_game', seen['script'])
-        self.assertTrue(seen['env']['EVA_PS1'].endswith('install_update.ps1')); self.assertEqual(seen['env']['EVA_ZIP'], '/x/EVA_v0.9.8_UPDATE.zip')
+        self.assertTrue(seen['env']['EVA_PS1'].endswith('install_update.ps1')); self.assertEqual(seen['env']['EVA_ZIP'], '/x/EVA_v0.9.9_UPDATE.zip')
         self.assertIn('pause', seen['script'])                      # the window stays open on failure
     def test_success_message(self):
-        S.run_installer = lambda f, p: (open(S.TARGET / 'updates' / 'last-result.json', 'w').write(json.dumps({'ok': True, 'version': '0.9.8'})), 0)[1]
-        self.assertEqual(S.main([]), 0); self.assertIn('EVA 0.9.8 is installed', self.boxes[-1])
+        S.run_installer = lambda f, p: (open(S.TARGET / 'updates' / 'last-result.json', 'w').write(json.dumps({'ok': True, 'version': '0.9.9'})), 0)[1]
+        self.assertEqual(S.main([]), 0); self.assertIn('EVA 0.9.9 is installed', self.boxes[-1])
     def test_failure_message_shows_the_reason_and_old_version_is_kept(self):
         S.run_installer = lambda f, p: (open(S.TARGET / 'updates' / 'last-result.json', 'w').write(json.dumps({'ok': False, 'error': 'Stop recording first'})), 1)[1]
         self.assertEqual(S.main([]), 1); self.assertIn('Stop recording first', self.boxes[-1]); self.assertIn('previous EVA was kept', self.boxes[-1])

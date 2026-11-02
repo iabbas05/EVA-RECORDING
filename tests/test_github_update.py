@@ -17,4 +17,22 @@ class Gh(unittest.TestCase):
         with self.assertRaises(U.UpdateError): U.stage(U.DEFAULT_MANIFEST)
     def test_manager_falls_back_to_default(self):
         import manager; self.assertIs(manager.DEFAULT_MANIFEST, U.DEFAULT_MANIFEST)
+
+
+class Tls(unittest.TestCase):
+    def test_context_trusts_the_certifi_list_too(self):
+        import importlib; U2 = importlib.reload(U)
+        ctx = U2._ssl_context(); self.assertGreater(ctx.cert_store_stats()['x509_ca'], 50)
+    def test_certificate_failure_gets_a_plain_message(self):
+        import urllib.request, ssl
+        real = urllib.request.urlopen
+        def boom(*a, **k): raise urllib.error.URLError(ssl.SSLCertVerificationError('CERTIFICATE_VERIFY_FAILED unable to get local issuer certificate'))
+        urllib.request.urlopen = boom
+        try:
+            import importlib; U2 = importlib.reload(U)
+            with self.assertRaises(U2.UpdateError) as c: U2._open_https('https://raw.githubusercontent.com/x', 100)
+            self.assertIn('Browse update ZIP', str(c.exception))
+        finally: urllib.request.urlopen = real
+
+
 if __name__ == '__main__': unittest.main()

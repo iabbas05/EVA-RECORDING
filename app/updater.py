@@ -33,14 +33,34 @@ def version_tuple(value):
         raise UpdateError('Version must use major.minor.patch')
     return tuple(map(int, value.split('.')))
 
+def _ssl_context():
+    """Windows certificates plus the CA list shipped with EVA (certifi): GitHub downloads work on PCs whose certificate store is incomplete."""
+    import ssl
+    context = ssl.create_default_context()
+    try:
+        import certifi
+        context.load_verify_locations(certifi.where())
+    except Exception:
+        pass
+    return context
+
+
 def _open_https(url, limit):
     if not url.startswith('https://'):
         raise UpdateError('Update downloads require HTTPS')
     request = urllib.request.Request(url, headers={'User-Agent': 'EVA/' + VERSION})
-    with urllib.request.urlopen(request, timeout=45) as response:
-        if not response.geturl().startswith('https://'):
-            raise UpdateError('Update server redirected to an insecure URL')
-        data = response.read(limit + 1)
+    try:
+        with urllib.request.urlopen(request, timeout=45, context=_ssl_context()) as response:
+            if not response.geturl().startswith('https://'):
+                raise UpdateError('Update server redirected to an insecure URL')
+            data = response.read(limit + 1)
+    except UpdateError:
+        raise
+    except Exception as exc:
+        if 'CERTIFICATE_VERIFY_FAILED' in str(exc):
+            raise UpdateError('This PC does not trust the GitHub certificate (antivirus or network HTTPS scanning, or a wrong PC clock). '
+                              'Check the PC date and time, or use Browse update ZIP with the file from GitHub Releases.') from exc
+        raise
     if len(data) > limit:
         raise UpdateError('Update response exceeds the size limit')
     return data

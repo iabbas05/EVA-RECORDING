@@ -1,4 +1,7 @@
-# EVA 0.9.8 — Streaming PC release
+# EVA 0.9.9 — Streaming PC release
+
+## What changed in 0.9.9
+- **Update check no longer fails with a certificate error.** EVA now trusts the Windows certificate store plus its own bundled list, and shows a plain message (check the PC clock, antivirus HTTPS scanning, or use *Browse update ZIP*) if GitHub still cannot be trusted.
 
 ## What changed in 0.9.8
 - **Choose what to record.** A selector next to *Record* on the dashboard: *Streamlabs + OBS (both)*, *Streamlabs only* or *OBS only*. It is remembered. Only the chosen recorder is started, checked and stopped; the other may be closed. A one-video session is verified, uploaded to Drive and emailed with just that video.
